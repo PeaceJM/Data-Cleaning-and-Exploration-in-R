@@ -1,0 +1,283 @@
+---
+title: "Data Cleaning Practice"
+author: "PM"
+date: "2023-07-31"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Data Cleaning Practice Markdown
+
+This is a R markdown of important data cleaning code for future projects. For more information on creating a markdown visit: <http://rmarkdown.rstudio.com>.
+
+## Important packages
+
+```{r common packags for data cleaning}
+library("tibble")
+library("tidyr")
+library("ggplot2")
+library("eeptools")
+print("Done")
+```
+
+## Getting the data
+
+```{r get the data}
+library(readr)
+my_fake_demographics <- read_csv("my_fake_demographics.csv")
+View(my_fake_demographics)
+dem.df2 <- my_fake_demographics # Keep the name simple 
+head(dem.df2)
+```
+
+```{r get to know the data1}
+summary(dem.df2)
+```
+
+```{r get to know the data2}
+str(dem.df2)
+```
+
+```{r get to know the data3}
+names(dem.df2)
+```
+
+I can see the dimensions, categories, values, and stats of the data
+
+## Missing values
+
+```{r finding missing values}
+sapply(dem.df2, function(x) sum(is.na(x)))
+```
+
+```{r missing value map}
+library("visdat")
+vis_miss(dem.df2) 
+```
+
+## Imputation
+
+Now lets correct the missing values in "RACE", "ETHNICITY", and "SEX".
+
+```{r imputation}
+dem.df2[!complete.cases(dem.df2),] # show rows with missing values
+```
+
+# Ttanic data
+
+These are the packages needed for the next part (imputation)
+
+```{r mice}
+library(ggplot2)
+library(dplyr)
+library(titanic)
+library(cowplot)
+
+titanic_train$Age
+
+```
+
+```{r mice getting the data}
+sapply(titanic_train, function(x) sum(is.na(x)))
+library("visdat")
+vis_miss(titanic_train)
+```
+
+# Simple Imputation
+
+The value_imputed variable will store a data.frame of the imputed ages. The imputation itself boils down to replacing a column subset that has a value of NA with the value of our choice. This will be:
+
+Zero: constant imputation, feel free to change the value. Mean (average): average age after when all NA's are removed. Median: median age after when all NA's are removed. \## Visualize variable distribution This step is important to compare variables before and after imputation.
+
+```{r}
+ggplot(titanic_train, aes(Age)) +
+  geom_histogram(color = "#000000", fill = "#0099F8") +
+  ggtitle("Variable distribution") +
+  theme_classic() +
+  theme(plot.title = element_text(size = 18))
+```
+
+```{r simple imputation1}
+value_imputed <- data.frame(
+  original = titanic_train$Age,
+  imputed_zero = replace(titanic_train$Age, is.na(titanic_train$Age), 0),
+  imputed_mean = replace(titanic_train$Age, is.na(titanic_train$Age), mean(titanic_train$Age, na.rm = TRUE)),
+  imputed_median = replace(titanic_train$Age, is.na(titanic_train$Age), median(titanic_train$Age, na.rm = TRUE))
+)
+value_imputed
+```
+
+### New variable distribution
+
+```{r simple imputation2}
+h1 <- ggplot(value_imputed, aes(x = original)) +
+  geom_histogram(fill = "#ad1538", color = "#000000", position = "identity") +
+  ggtitle("Original distribution") +
+  theme_classic()
+h2 <- ggplot(value_imputed, aes(x = imputed_zero)) +
+  geom_histogram(fill = "#15ad4f", color = "#000000", position = "identity") +
+  ggtitle("Zero-imputed distribution") +
+  theme_classic()
+h3 <- ggplot(value_imputed, aes(x = imputed_mean)) +
+  geom_histogram(fill = "#1543ad", color = "#000000", position = "identity") +
+  ggtitle("Mean-imputed distribution") +
+  theme_classic()
+h4 <- ggplot(value_imputed, aes(x = imputed_median)) +
+  geom_histogram(fill = "#ad8415", color = "#000000", position = "identity") +
+  ggtitle("Median-imputed distribution") +
+  theme_classic()
+
+plot_grid(h1, h2, h3, h4, nrow = 2, ncol = 2)
+```
+
+## MICE
+
+MICE stands for Multivariate Imputation via Chained Equations, and it's one of the most common packages for R users. It assumes the missing values are missing at random (MAR). The basic idea behind the algorithm is to treat each variable that has missing values as a dependent variable in regression and treat the others as independent (predictors). The R mice packages provide many univariate imputation methods.
+
+[https://appsilon.com/imputation-in-r/#:\~:text=Impute%20Missing%20Values%20in%20R%20with%20MICE&text=It%20assumes%20the%20missing%20values,others%20as%20independent%20(predictors).](https://appsilon.com/imputation-in-r/#:~:text=Impute%20Missing%20Values%20in%20R%20with%20MICE&text=It%20assumes%20the%20missing%20values,others%20as%20independent%20(predictors).)
+
+We will be using the titanic data to learn about imputation package. \### Examine the data It is important to get a visual representation of missing data and variable distribution when examining new data.
+
+```{r mice1}
+library(mice)
+
+titanic_numeric <- titanic_train %>%
+  select(Survived, Pclass, SibSp, Parch, Age)
+
+md.pattern(titanic_numeric)
+```
+
+I prefer the \`sapply\` method. I shows the missing values clearly.
+
+```{r sapply}
+sapply(titanic_numeric, function(x) sum(is.na(x)))
+```
+
+Onto the imputation now. We'll use the following MICE imputation methods:
+
+-   pmm: Predictive mean matching.
+-   cart: Classification and regression trees.
+-   laso.norm: Lasso linear regression.
+
+```{r mice2}
+mice_imputed <- data.frame(
+  original = titanic_train$Age,
+  imputed_pmm = complete(mice(titanic_numeric, method = "pmm"))$Age,
+  imputed_cart = complete(mice(titanic_numeric, method = "cart"))$Age,
+  imputed_lasso = complete(mice(titanic_numeric, method = "lasso.norm"))$Age
+)
+mice_imputed 
+```
+
+### Examine the new data
+
+```{r mice3}
+h1 <- ggplot(mice_imputed, aes(x = original)) +
+  geom_histogram(fill = "#ad1538", color = "#000000", position = "identity") +
+  ggtitle("Original distribution") +
+  theme_classic()
+h2 <- ggplot(mice_imputed, aes(x = imputed_pmm)) +
+  geom_histogram(fill = "#15ad4f", color = "#000000", position = "identity") +
+  ggtitle("PMM-imputed distribution") +
+  theme_classic()
+h3 <- ggplot(mice_imputed, aes(x =  imputed_cart)) +
+  geom_histogram(fill = "#1543ad", color = "#000000", position = "identity") +
+  ggtitle("CART-imputed distribution") +
+  theme_classic()
+h4 <- ggplot(mice_imputed, aes(x = imputed_lasso)) +
+  geom_histogram(fill = "#ad8415", color = "#000000", position = "identity") +
+  ggtitle("Lasso-imputed distribution") +
+  theme_classic()
+
+plot_grid(h1, h2, h3, h4, nrow = 2, ncol = 2)
+```
+
+Note that there are negative ages that show in the lasso results. negative values will need to be corrected manually.
+
+There are many ways to impute in R. Check out [[https://appsilon.com/imputation-in-r/#:\\\\](https://appsilon.com/imputation-in-r/#:\\){.uri}]([https://appsilon.com/imputation-in-r/#:\\](https://appsilon.com/imputation-in-r/#:\){.uri}){.uri}\~:text=Impute%20Missing%20Values%20in%20R%20with%20MICE&text=It%20assumes%20the%20missing%20values,others%20as%20independent%20(predictors) for more information. \# Patient demographics data practice Now back to working with our patient demographic data `dem.df2` (these are fake demographics).
+
+```{r dem.df2}
+head(dem.df2)
+```
+
+## Add CURRENT_AGE column
+
+The objective of this task is to learn how to copy, add, and calculate a new data to a df.
+
+```{r add col}
+dem.df2$CURRENT_AGE <- 0 # add the CURRENT_AGE column with 0 as a place holder value
+head(dem.df2)
+```
+
+```{r age}
+# create the date variable
+as.Date
+```
+``` {r drop na}
+install.packages("tidyr")
+library("tidyr")
+dem.df2 %>% drop_na()
+```
+```{r age2}
+# solution: Missing value where true/false needed
+library("eeptools")
+dem.df2$CURRENT_AGE <- dem.df2$PAT_DOB # copy a column
+library(lubridate)
+# make sure that the dates are in the same format
+dem.df2$CURRENT_AGE <- as.Date(dem.df2$PAT_DOB, format = "%m/%d/%Y") 
+dem.df2$PAT_DOB <- as.Date(dem.df2$PAT_DOB, format = "%m/%d/%Y")
+# convert to age in years 
+dem.df2$CURRENT_AGE <- age_calc(dem.df2$CURRENT_AGE, units = "years")
+head(dem.df2)
+```
+
+# Pulling specific data from a df
+
+Extract all female patients ages greater than or equal to 10.
+
+```{r data pull}
+subset(dem.df2, SEX == 'Female' & CURRENT_AGE >= 10)
+```
+
+# Plots
+
+Now we will work on creating plots. Plot patient "SEX".Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot. There are more complicated plot in the 'Simple Imputation' section.
+
+```{r plots}
+library("tidyverse")
+```
+
+```{r plot}
+dem.df2 %>% count(SEX) 
+ggplot(data = dem.df2) + 
+  geom_bar(mapping = aes(x = SEX)) # simple bar graph
+```
+
+# Exporting data
+
+This is the template to export data. `write.csv(DataFrame Name, "Path to export the DataFrame\\File Name.csv", row.names=FALSE)`
+
+```{r export}
+# Load readr package
+library("readr")
+```
+
+```{r export2}
+write_csv(dem.df2, "new_patientdem.csv") 
+```
+
+# Resources
+
+<https://www.r-bloggers.com/2021/04/handling-missing-values-in-r/> <https://stackoverflow.com/questions/27096485/change-a-column-from-birth-date-to-age-in-r> 
+<[https://sparkbyexamples.com/r-programming/r-subset-data-frame-with-examples/#:\~:text=If%20you%20wanted%20to%20get,variables)%20from%20the%20data%20frame.]>
+
+<(https://sparkbyexamples.com/r-programming/r-subset-data-frame-with-examples/#:~:text=If%20you%20wanted%20to%20get,variables)%20from%20the%20data%20frame.){.uri}>
+
+<https://michaelgastner.com/R_for_QR/extracting-values-from-data-frames.html> <https://community.rstudio.com/t/dplyr-way-s-and-base-r-way-s-of-creating-age-group-from-age/89226/3> <https://www.datanovia.com/en/lessons/subset-data-frame-rows-in-r/> <https://r4ds.had.co.nz/data-visualisation.html> <https://www.infoworld.com/article/3573577/how-to-count-by-groups-in-r.html> <https://dplyr.tidyverse.org/reference/mutate.html>
+
+<https://sparkbyexamples.com/r-programming/r-export-csv-using-write-csv/>
